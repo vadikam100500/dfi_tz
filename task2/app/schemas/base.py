@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from enum import Enum
-from uuid import UUID
 from typing import Any
+from uuid import UUID
 
 
 class EnumBaseUpper(str, Enum):
@@ -17,3 +17,6 @@ class EnumBaseUpper(str, Enum):
 class Entity:
     id: UUID
     value: Any
+
+    def __hash__(self) -> int:
+        return hash(str(self.id))

@@ -3,6 +3,7 @@ from uuid import UUID
 from app.config.logging_settings import get_logger
 from app.core.storage import storage
 from app.core.transaction import Transaction
+from app.exceptions.exception import ProcessingException
 from app.schemas.transaction import TransactionStatus, TransactionType
 
 logger = get_logger(__name__)
@@ -29,9 +30,14 @@ class TransactionManager:
         self._transactions[main_transaction] = [nested_transaction]
         return nested_transaction
 
-    def _add_nested_transaction(self) -> Transaction:
+    def _get_pending_nested_transaction(self) -> Transaction:
         main_transaction: Transaction | None = self._get_pending_transaction()
         if main_transaction:
+            nested_transactions: list[Transaction] = self._transactions[main_transaction]
+            for transaction in reversed(nested_transactions):
+                if transaction.status == TransactionStatus.PENDING:
+                    return transaction
+
             transaction = Transaction(type=TransactionType.NESTED)
             self._transactions[main_transaction].append(transaction)
         else:
@@ -42,7 +48,7 @@ class TransactionManager:
         if not self._transactions:
             transaction: Transaction = self._create_transaction_with_nested()
         else:
-            transaction: Transaction = self._add_nested_transaction()
+            transaction: Transaction = self._get_pending_nested_transaction()
         return transaction
 
     def get_read_only_transaction(self) -> Transaction:
@@ -64,7 +70,11 @@ class TransactionManager:
             pass
 
     def commit(self) -> None:
-        main_transaction, nested_transactions = next(iter(self._transactions.items()))
+        try:
+            main_transaction, nested_transactions = next(iter(self._transactions.items()))
+        except StopIteration:
+            raise ProcessingException('No transactions in commit stage.')
+
         main_transaction.status = TransactionStatus.COMMIT
 
         transactions_ids = {main_transaction.id} | {nested_transaction.id for nested_transaction in nested_transactions}
@@ -83,6 +93,7 @@ class TransactionManager:
 
         self._remove_main_transaction(main_transaction)
         self._last_changed_transactions = {*nested_transactions}
+        self._in_change_stage -= transactions_ids
 
         try:
             storage.commit()
@@ -92,6 +103,8 @@ class TransactionManager:
 
     def rollback(self) -> None:
         [tranasction.rollback() for tranasction in self._last_changed_transactions]
+        logger.info(f'Rollback transactions: {[tranasction.id for tranasction in self._last_changed_transactions]}')
+        self._last_changed_transactions = {}
 
 
 transaction_manager = TransactionManager()

@@ -46,7 +46,7 @@ class Transaction:
         self.status = TransactionStatus.READY_TO_COMMIT
 
     def commit(self) -> None:
-        if not any(self.entity, self.method):
+        if not any((self.entity, self.method)):
             raise ProcessingException(f'System error: entity {self.entity} or method {self.method} not set')
 
         self.status = TransactionStatus.COMMIT
