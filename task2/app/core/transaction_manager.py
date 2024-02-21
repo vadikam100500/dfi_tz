@@ -106,5 +106,22 @@ class TransactionManager:
         logger.info(f'Rollback transactions: {[tranasction.id for tranasction in self._last_changed_transactions]}')
         self._last_changed_transactions = {}
 
+    def rollback_by_nested_transaction(self, transaction: Transaction) -> None:
+        main_transaction = None
+        nested_transactions = None
+        for transaction, transaction_nested in self._transactions.items():
+            if transaction == transaction or transaction in transaction_nested:
+                main_transaction, nested_transactions = transaction, transaction_nested
+                break
+
+        if not main_transaction:
+            raise ProcessingException(f'System error: transaction {transaction.id} not found '
+                                      'during rollback_by_nested_transaction')
+
+        self._transactions.pop(transaction)
+        [nested_transaction.rollback() for nested_transaction in nested_transactions]
+        logger.info(f'Nested transactions for transaction [{main_transaction.id}] deleted: '
+                    f'{[nested_transaction.id for nested_transaction in nested_transactions]}')
+
 
 transaction_manager = TransactionManager()

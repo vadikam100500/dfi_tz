@@ -7,6 +7,7 @@ from app.core.transaction_manager import transaction_manager
 from app.exceptions.exception import ProcessingException
 from app.schemas.base import Entity
 from app.schemas.transaction import TransactionType
+from app.service.utils.decorators import rollback_on_failure
 
 logger = get_logger(__name__)
 
@@ -20,7 +21,7 @@ def get_storage_data(transaction: Transaction) -> list[Entity | None]:
     return storage_data
 
 
-# TODO decorator to rollback all transactions
+@rollback_on_failure
 def insert_entity(transaction: Transaction, value: Any) -> None:
     if transaction.type == TransactionType.READ_ONLY:
         raise ProcessingException(f'Wrong transaction type: {transaction.type} to insert entity')
@@ -28,7 +29,7 @@ def insert_entity(transaction: Transaction, value: Any) -> None:
     logger.info(f'Inserted entity: {value} to transaction: {transaction.id}')
 
 
-# TODO decorator to rollback all transactions
+@rollback_on_failure
 def delete_entity(transaction: Transaction, id: UUID) -> None:
     if transaction.type == TransactionType.READ_ONLY:
         raise ProcessingException(f'Wrong transaction type: {transaction.type} to delete entity')
