@@ -43,7 +43,7 @@ VALUES
 # I have 2 solutions and don't know how to optimize them for big data
 
 # First solution
-SELECT root.project, root.id AS root_id, COUNT(DISTINCT branches.branch_id) AS branch_count, jsonb_agg(DISTINCT colors ->> 'color') AS leaf_colors
+SELECT root.project, root.id AS root_id, COUNT(DISTINCT branches.branch_id) AS branch_count, JSONB_AGG(DISTINCT colors ->> 'color') AS leaf_colors
 FROM (
 	SELECT *
 	FROM A
@@ -67,28 +67,22 @@ GROUP BY  root.project, root.id;
 -- 1, 3, 0, [null]
 
 # second solution
-SELECT main.project, main.root_id, main.branch_count, JSONB_AGG(DISTINCT main.leaf_colors) AS leaf_colors
-FROM (
-	SELECT a.project, a.id AS root_id, COALESCE(branches.branch_count, 0) AS branch_count, UNNEST((STRING_TO_ARRAY(COALESCE(branches.leaf_colors, '{}'), ','))) AS leaf_colors
-	FROM A
+SELECT a.project, a.id, COALESCE(branches.branch_count, 0), COALESCE(leaf_colors, '[]'::jsonb)
+FROM a 
+LEFT JOIN (
+	SELECT parent_id AS root_id, COUNT(DISTINCT id) AS branch_count, JSONB_AGG(DISTINCT leafs.extra ->> 'color') AS leaf_colors
+	FROM a
 	LEFT JOIN (
-	    SELECT parent_id AS root_id, COUNT(*) AS branch_count, STRING_AGG(DISTINCT leafs.colors, ',') AS leaf_colors
-	    FROM A
-	    LEFT JOIN (
-	        SELECT STRING_AGG(DISTINCT extra->>'color', ',') AS colors, parent_id AS branch_id 
-	        FROM a
-	        WHERE project = '1' AND a.type = 'leaf' AND extra IS NOT NULL AND parent_id IS NOT NULL AND extra->>'color' IS NOT NULL
-	        GROUP BY parent_id
-	    ) leafs ON a.id = leafs.branch_id 
-	    WHERE project = '1' AND type = 'branch' AND parent_id IS NOT NULL
-	    GROUP BY parent_id
-	) branches ON a.id = branches.root_id
-	WHERE a.project = '1' AND a.type = 'root'
-) AS main
-GROUP BY main.project, main.root_id, main.branch_count;
+	    SELECT extra, parent_id AS branch_id 
+	    FROM a
+	    WHERE project = '1' AND a.type = 'leaf' AND extra IS NOT NULL AND parent_id IS NOT NULL AND extra->>'color' IS NOT NULL
+	) leafs ON a.id = leafs.branch_id 
+	WHERE project = '1' AND a."type" = 'branch' AND parent_id IS NOT null
+	GROUP BY parent_id
+) branches ON a.id = branches.root_id
+WHERE a.project = '1' AND a.type = 'root'
 
 -- will return
--- 1, 1, 3, ["green","yellow", "red"]
+-- 1, 1, 3, ["green","yellow", "red", null]
 -- 1, 2, 1, ["green"]
--- 1, 3, 0, ["{}"]
-
+-- 1, 3, 0, []
