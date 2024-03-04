@@ -43,7 +43,14 @@ VALUES
 # I have 2 solutions and don't know how to optimize them for big data
 
 # First solution
-SELECT root.project, root.id AS root_id, COUNT(DISTINCT branches.branch_id) AS branch_count, JSONB_AGG(DISTINCT colors ->> 'color') AS leaf_colors
+SELECT
+    root.project,
+	root.id AS root_id,
+	COUNT(DISTINCT branches.branch_id) AS branch_count,
+	COALESCE(
+        JSONB_AGG(DISTINCT colors ->> 'color') FILTER (WHERE colors ->> 'color' IS NOT NULL),
+        '[]'::jsonb
+    ) AS leaf_colors
 FROM (
 	SELECT *
 	FROM A
@@ -62,27 +69,34 @@ LEFT JOIN (
 GROUP BY  root.project, root.id;
 
 -- will return 
--- 1, 1, 3, ["green","yellow", "red", null]
+-- 1, 1, 3, ["green","yellow", "red"]
 -- 1, 2, 1, ["green"]
--- 1, 3, 0, [null]
+-- 1, 3, 0, []
 
 # second solution
-SELECT a.project, a.id, COALESCE(branches.branch_count, 0), COALESCE(leaf_colors, '[]'::jsonb)
+SELECT 
+	a.project,
+	a.id,
+	COALESCE(branches_with_leafs.branch_count, 0) AS branch_count,
+	COALESCE(branches_with_leafs.leaf_colors_source, '[]'::jsonb) AS leaf_colors
 FROM a 
 LEFT JOIN (
-	SELECT parent_id AS root_id, COUNT(DISTINCT id) AS branch_count, JSONB_AGG(DISTINCT leafs.extra ->> 'color') AS leaf_colors
+	SELECT
+        parent_id AS root_id,
+        COUNT(DISTINCT id) AS branch_count,
+        JSONB_AGG(DISTINCT leafs.extra ->> 'color') FILTER (WHERE leafs.extra ->> 'color' IS NOT NULL)  AS leaf_colors_source
 	FROM a
 	LEFT JOIN (
 	    SELECT extra, parent_id AS branch_id 
 	    FROM a
 	    WHERE project = '1' AND a.type = 'leaf' AND extra IS NOT NULL AND parent_id IS NOT NULL AND extra->>'color' IS NOT NULL
-	) leafs ON a.id = leafs.branch_id 
+	) AS leafs ON a.id = leafs.branch_id 
 	WHERE project = '1' AND a."type" = 'branch' AND parent_id IS NOT null
 	GROUP BY parent_id
-) branches ON a.id = branches.root_id
+) AS branches_with_leafs ON a.id = branches_with_leafs.root_id
 WHERE a.project = '1' AND a.type = 'root'
 
 -- will return
--- 1, 1, 3, ["green","yellow", "red", null]
+-- 1, 1, 3, ["green","yellow", "red"]
 -- 1, 2, 1, ["green"]
 -- 1, 3, 0, []
