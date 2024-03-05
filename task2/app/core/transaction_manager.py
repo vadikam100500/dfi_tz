@@ -35,11 +35,12 @@ class TransactionManager:
         if last_transaction.status != TransactionStatus.PENDING:
             raise NotFoundEntity('There is no pending transactions. Begin new one.')
 
+        transaction = None
+
         if last_transaction.nested_transaction:
             transaction: Transaction | None = self._get_pending_nested_transaction(last_transaction.nested_transaction)
-            if not transaction:
-                raise ProcessingException('There is no pending transactions. Begin new one.')
-        else:
+
+        if not transaction:
             transaction: Transaction = last_transaction
 
         return transaction
@@ -82,7 +83,7 @@ class TransactionManager:
 
     def _get_main_transaction(self, action: TransactionStatus) -> Transaction:
         if not self._transactions:
-            raise ProcessingException(f'There is no pending transactions. Nothing to {action}.')
+            raise ProcessingException(f'There is no transactions. Nothing to {action}.')
 
         for transaction in reversed(self._transactions):
             if transaction.status == TransactionStatus.PENDING:
@@ -99,6 +100,8 @@ class TransactionManager:
                 raise ProcessingException(f'There is no pending nested transactions. Nothing to {action}.')
         else:
             transaction = main_transaction
+
+        if transaction.type == TransactionType.MAIN:
             self._transactions.remove(transaction)
 
         return transaction
