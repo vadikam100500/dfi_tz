@@ -15,7 +15,7 @@ router = APIRouter()
 
 @router.get("/begin", response_model=UUID)
 async def begin_transaction():
-    transaction: Transaction = transaction_manager.get_transaction()
+    transaction: Transaction = transaction_manager.create_transaction()
     return transaction.id
 
 
